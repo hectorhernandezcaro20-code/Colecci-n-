@@ -84,7 +84,7 @@ dialog img{width:100%;border-radius:8px;margin:8px 0}
   </div>
 </header>
 <main>
-  <p class="hint">Escanea una carta o tócala para marcarla como tuya. Las que te faltan se ven en blanco y negro; al desbloquearlas aparecen a todo color.</p>
+  <p class="hint">Escanea una carta (v6.2) o tócala para marcarla como tuya. Las que te faltan se ven en blanco y negro; al desbloquearlas aparecen a todo color.</p>
   <div id="extraStats" class="hint" style="margin-bottom:10px"></div>
   <div class="grid" id="grid"></div>
   <div id="msg"></div>
@@ -294,7 +294,7 @@ function softNorm(g,w,h,win,k){
       var q=128+(s[y*w+x]-mean)*k;o[y*w+x]=q<0?0:q>255?255:q}}
   return o;
 }
-var ocrW=null,CFGS=[[50,41,3],[30,31,4],[40,41,2],[64,41,3]];
+var APPV="6.2",ocrW=null,CFGS=[[50,41,3],[30,31,4],[40,41,2],[64,41,3]];
 function getWorker(){
   if(ocrW)return ocrW;
   ocrW=loadTess().then(function(){return Tesseract.createWorker("eng")}).then(function(w){return Promise.resolve(w.setParameters({tessedit_pageseg_mode:"7"})).then(function(){return w})});
@@ -327,6 +327,7 @@ function findNumber(src,sw,sh,o){
       if(o.progress&&k===0)o.progress(i+1,boxes.length);
       var c=CFGS[k];
       return w.recognize(cropCanvas(src,sw,sh,boxes[i],c[0],c[1],c[2])).then(function(r){
+        if(o.log&&o.log.length<40)o.log.push((r.data.text||"").replace(/\s+/g," ").trim().slice(0,40));
         var p=parseCard(r.data.text,o.loose);
         if(p.n&&p.si>=0)return p;
         k++;if(k>=nc){k=0;i++}
@@ -375,15 +376,16 @@ function scanInfo(){
 }
 function showScan(){
   if(!scan||!document.getElementById("dlg").open)return;
+  var dbg=scan.ok?"":'<details style="margin:6px 0;font-size:11px;color:var(--mut)"><summary>Detalles técnicos (v'+APPV+')</summary>'+(scan.log&&scan.log.length?scan.log.filter(function(x){return x}).slice(0,10).map(function(x){return x.replace(/[<>&]/g,"")}).join(" | "):"sin lecturas")+'</details>';
   var st="width:100%;padding:9px;border-radius:9px;border:1px solid var(--bd);background:var(--card);color:var(--fg)";
   var opts=SETS.map(function(s,i){return '<option value="'+i+'"'+(i===scan.si?' selected':'')+'>'+s.name+'</option>'}).join("");
   var msg=scan.err?"No se pudo cargar el lector (¿sin conexión?). Indica la carta a mano.":(scan.amb&&scan.amb.length>1)?"Varias colecciones tienen ese total ("+scan.amb.map(function(i){return SETS[i].name}).join(", ")+"). Elige la correcta:":scan.ok?"Carta detectada. Comprueba que la imagen es la tuya:":"No he podido leer el número. Indícalo a mano:";
-  dialog("Carta escaneada",'<img id="scImg" alt="" style="display:none"><p class="hint">'+msg+'</p><select id="scSet" style="'+st+'">'+opts+'</select><input id="scNum" type="number" min="1" inputmode="numeric" value="'+(scan.n||"")+'" placeholder="Número de carta" style="'+st+';margin-top:8px"><p id="scInfo" class="hint" style="margin-top:8px"></p><button class="btn p" data-a="scansave">Desbloquear carta</button><button class="btn" data-a="close">Cancelar</button>');
+  dialog("Carta escaneada",'<img id="scImg" alt="" style="display:none"><p class="hint">'+msg+'</p>'+dbg+'<select id="scSet" style="'+st+'">'+opts+'</select><input id="scNum" type="number" min="1" inputmode="numeric" value="'+(scan.n||"")+'" placeholder="Número de carta" style="'+st+';margin-top:8px"><p id="scInfo" class="hint" style="margin-top:8px"></p><button class="btn p" data-a="scansave">Desbloquear carta</button><button class="btn" data-a="close">Cancelar</button>');
   scanInfo();
 }
 function runOcr(im,id){
   setSt("Cargando lector de texto…");
-  findNumber(im,im.naturalWidth||im.width,im.naturalHeight||im.height,{max:12,cfgs:4,loose:true,
+  findNumber(im,im.naturalWidth||im.width,im.naturalHeight||im.height,{max:12,cfgs:4,loose:true,log:(scan&&scan.id===id?(scan.log=[]):[]),
     alive:function(){return !!scan&&scan.id===id},
     progress:function(a,b){setSt("Buscando el número… "+a+" de "+b)}
   }).then(function(p){
