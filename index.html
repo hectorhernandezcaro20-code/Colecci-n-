@@ -92,7 +92,7 @@ dialog img{width:100%;border-radius:8px;margin:8px 0}
   </div>
 </header>
 <main>
-  <p class="hint">Escanea una carta (v6.4) o tócala para marcarla como tuya. Las que te faltan se ven en blanco y negro; al desbloquearlas aparecen a todo color.</p>
+  <p class="hint">Escanea una carta (v6.6) o tócala para marcarla como tuya. Las que te faltan se ven en blanco y negro; al desbloquearlas aparecen a todo color.</p>
   <div id="extraStats" class="hint" style="margin-bottom:10px"></div>
   <div class="grid" id="grid"></div>
   <div id="msg"></div>
@@ -293,6 +293,20 @@ function textBoxes(g,w,h){
     for(yy=bx.y;yy<bx.y+bx.h;yy++)for(xx=bx.x;xx<bx.x+bx.w;xx++){if(m[yy*w+xx]){sum+=bh[yy*w+xx];cnt++}}
     bx.s=cnt?sum/cnt:0;bx.d=cnt/(bx.w*bx.h);
   }
+  /* cuántos componentes parecen caracteres (alto parecido al de la línea, ancho razonable) */
+  for(var z=0;z<out.length;z++){
+    var bx=out[z],bw2=bx.w,bh2=bx.h,seen=new Uint8Array(bw2*bh2),cnt=0,tot=0,st=[],yy,xx;
+    for(yy=0;yy<bh2;yy++)for(xx=0;xx<bw2;xx++){
+      var ps=yy*bw2+xx;if(seen[ps]||!m[(bx.y+yy)*w+bx.x+xx])continue;
+      var cx0=xx,cx1=xx,cy0=yy,cy1=yy;st.length=0;st.push(ps);seen[ps]=1;
+      while(st.length){var pp=st.pop(),qx=pp%bw2,qy=(pp-qx)/bw2;
+        if(qx<cx0)cx0=qx;if(qx>cx1)cx1=qx;if(qy<cy0)cy0=qy;if(qy>cy1)cy1=qy;
+        for(var ey=-1;ey<=1;ey++){var ny=qy+ey;if(ny<0||ny>=bh2)continue;for(var ex=-1;ex<=1;ex++){var nx=qx+ex;if(nx<0||nx>=bw2)continue;var np=ny*bw2+nx;if(!seen[np]&&m[(bx.y+ny)*w+bx.x+nx]){seen[np]=1;st.push(np)}}}}
+      tot++;var chh=cy1-cy0+1,cww=cx1-cx0+1;
+      if(chh>=0.55*bh2&&chh<=1.2*bh2&&cww>=0.12*bh2&&cww<=1.4*bh2)cnt++;
+    }
+    bx.c=cnt;bx.t=tot;
+  }
   out.sort(function(a,b){return (b.y+b.h)-(a.y+a.h)});
   return out;
 }
@@ -331,26 +345,42 @@ function adaptBin(g,w,h,C){
       o[y*w+x]=s[y*w+x]>mean-C?255:0}}
   return o;
 }
-var APPV="6.4",ocrW=null,CFGS=[[50,41,3],[64,41,3],[30,31,4],[40,41,2],[52,0,8,"adapt"],[64,0,0,"plain"],[40,0,16,"adapt"]];
+var APPV="6.6",ocrW=null,CFGS=[[50,41,3],[64,41,3],[30,31,4],[40,41,2],[52,0,8,"adapt"],[64,0,0,"plain"],[40,0,16,"adapt"]];
 function getWorker(){
   if(ocrW)return ocrW;
   ocrW=loadTess().then(function(){return Tesseract.createWorker("eng")}).then(function(w){return Promise.resolve(w.setParameters({tessedit_pageseg_mode:"7"})).then(function(){return w})});
   ocrW.catch(function(){ocrW=null});
   return ocrW;
 }
-function cropRect(src,sw,sh,x0,y0,x1,y1,sc,pc){
+function cropRect(src,sw,sh,x0,y0,x1,y1,sc,pc,ang){
+  if(ang){
+    var rw=x1-x0,rh=y1-y0,ex=rw*0.25,ey=rh*0.9,big=cropRaw(src,sw,sh,x0-ex,y0-ey,x1+ex,y1+ey,sc),ow=Math.round(rw*sc),oh=Math.round(rh*sc);
+    var rc=document.createElement("canvas");rc.width=big.width;rc.height=big.height;
+    var rx=rc.getContext("2d",{willReadFrequently:true});rx.fillStyle="#fff";rx.fillRect(0,0,rc.width,rc.height);
+    rx.translate(rc.width/2,rc.height/2);rx.rotate(ang*Math.PI/180);rx.drawImage(big,-big.width/2,-big.height/2);
+    var fc=document.createElement("canvas");fc.width=Math.max(8,ow);fc.height=Math.max(8,oh);
+    fc.getContext("2d",{willReadFrequently:true}).drawImage(rc,Math.round((rc.width-ow)/2),Math.round((rc.height-oh)/2),ow,oh,0,0,fc.width,fc.height);
+    return finishCrop(fc,pc);
+  }
+  return finishCrop(cropRaw(src,sw,sh,x0,y0,x1,y1,sc),pc);
+}
+function cropRaw(src,sw,sh,x0,y0,x1,y1,sc){
   x0=Math.max(0,Math.floor(x0));y0=Math.max(0,Math.floor(y0));x1=Math.min(sw,Math.ceil(x1));y1=Math.min(sh,Math.ceil(y1));
   var cw=Math.max(8,Math.round((x1-x0)*sc)),ch=Math.max(8,Math.round((y1-y0)*sc));
   var c=document.createElement("canvas");c.width=cw;c.height=ch;
   var cx=c.getContext("2d",{willReadFrequently:true});cx.imageSmoothingQuality="high";
   cx.drawImage(src,x0,y0,Math.max(1,x1-x0),Math.max(1,y1-y0),0,0,cw,ch);
+  return c;
+}
+function finishCrop(c,pc){
+  var cw=c.width,ch=c.height,cx=c.getContext("2d",{willReadFrequently:true});
   var id=cx.getImageData(0,0,cw,ch),gg=grayOf(id.data),g=pc[2]==="adapt"?adaptBin(gg,cw,ch,pc[1]):pc[2]==="plain"?stretchOnly(gg,cw,ch):softNorm(gg,cw,ch,pc[0],pc[1]);
   for(var i=0,j=0;i<g.length;i++,j+=4){id.data[j]=id.data[j+1]=id.data[j+2]=g[i];id.data[j+3]=255}
   cx.putImageData(id,0,0);
   return c;
 }
-function cropCanvas(src,sw,sh,b,cfg){
-  return cropRect(src,sw,sh,b.x-b.w*0.15,b.y-b.h*0.4,b.x+b.w*1.15,b.y+b.h*1.4,cfg[0]/b.h,[cfg[1],cfg[2],cfg[3]]);
+function cropCanvas(src,sw,sh,b,cfg,ang){
+  return cropRect(src,sw,sh,b.x-b.w*0.15,b.y-b.h*0.4,b.x+b.w*1.15,b.y+b.h*1.4,cfg[0]/b.h,[cfg[1],cfg[2],cfg[3]],ang);
 }
 /* Lee el número alrededor de un punto tocado por el usuario (rx, ry en 0..1) */
 var PICKW=[[0.20,0.040],[0.14,0.032],[0.28,0.050]],PICKS=[1,0.7,1.45],PICKC=[[41,3],[31,4],[41,2],[0,8,"adapt"]],PICKO=[0,-0.012,0.012];
@@ -382,7 +412,12 @@ function findNumber(src,sw,sh,o){
   var s=800/sw,lw=800,lh=Math.max(8,Math.round(sh*s)),lc=document.createElement("canvas");
   lc.width=lw;lc.height=lh;
   var lx=lc.getContext("2d",{willReadFrequently:true});lx.drawImage(src,0,0,lw,lh);
-  var boxes=textBoxes(grayOf(lx.getImageData(0,0,lw,lh).data),lw,lh).slice(0,o.max||8).map(function(b){return{x:b.x/s,y:b.y/s,w:b.w/s,h:b.h/s}});
+  var all=textBoxes(grayOf(lx.getImageData(0,0,lw,lh).data),lw,lh);
+  /* primero las líneas con varios componentes parecidos a caracteres (descarta la textura de la mesa); después el resto, de más a menos parecido */
+  var good=all.filter(function(b){return b.c===undefined||(b.c>=3&&b.c>=0.3*b.t)});
+  var rest=all.filter(function(b){return good.indexOf(b)<0}).sort(function(a,b){return ((b.c||0)-(a.c||0))||((b.y+b.h)-(a.y+a.h))});
+  good=good.concat(rest);
+  var boxes=good.slice(0,o.max||8).map(function(b){return{x:b.x/s,y:b.y/s,w:b.w/s,h:b.h/s}});
   var nc=Math.min(o.cfgs||3,CFGS.length);
   return getWorker().then(function(w){
     function confirmRead(p0,b,k0){
@@ -395,13 +430,16 @@ function findNumber(src,sw,sh,o){
       return nxt();
     }
     var q=[],qi=0,gi,bi,ki,groups=[[0,1,2],[3,4],[5,6]],LIM=[24,16,12,8,8,8,8];
-    for(gi=0;gi<groups.length;gi++)for(bi=0;bi<boxes.length;bi++)for(ki=0;ki<groups[gi].length;ki++)if(groups[gi][ki]<nc&&bi<LIM[groups[gi][ki]])q.push([bi,groups[gi][ki]]);
+    for(gi=0;gi<groups.length;gi++){
+      for(bi=0;bi<boxes.length;bi++)for(ki=0;ki<groups[gi].length;ki++)if(groups[gi][ki]<nc&&bi<LIM[groups[gi][ki]])q.push([bi,groups[gi][ki]]);
+      if(gi===0&&o.rotate)for(bi=0;bi<Math.min(8,boxes.length);bi++){q.push([bi,0,-4]);q.push([bi,0,4])}
+    }
     function step(){
       if(o.alive&&!o.alive())return null;
       if(qi>=q.length)return null;
-      var i=q[qi][0],k=q[qi][1],c=CFGS[k];qi++;
+      var i=q[qi][0],k=q[qi][1],ang=q[qi][2]||0,c=CFGS[k];qi++;
       if(o.progress&&qi%4===1)o.progress(qi,q.length);
-      var cvs=cropCanvas(src,sw,sh,boxes[i],c),bx=boxes[i];
+      var cvs=cropCanvas(src,sw,sh,boxes[i],c,ang),bx=boxes[i];
       return w.recognize(cvs).then(function(r){
         if(o.log&&o.log.length<60){var u="";if(k===0&&o.log.length<45){try{u=cvs.toDataURL("image/jpeg",0.8)}catch(e){}}
           o.log.push({i:i,k:k,u:u,g:Math.round(bx.x/sw*100)+"%,"+Math.round(bx.y/sh*100)+"%",t:(r.data.text||"").replace(/\s+/g," ").trim().slice(0,40)})}
