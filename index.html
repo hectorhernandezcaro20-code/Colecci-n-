@@ -233,7 +233,7 @@ function parseCard(txt){
   SETS.forEach(function(s,i){if(byCode<0&&codeIn(txt,s))byCode=i});
   while((m=re.exec(t))){
     var tot=+m[2],num=+m[1],c=[];
-    SETS.forEach(function(s,i){if(s.total===tot&&num>=1&&num<=tot)c.push(i)});
+    SETS.forEach(function(s,i){if((s.main===tot||s.total===tot)&&num>=1&&num<=s.total)c.push(i)});
     if(!c.length)continue;
     var wc=c.filter(function(i){return codeIn(txt,SETS[i])});
     if(wc.length===1)return{si:wc[0],n:num,amb:[]};
