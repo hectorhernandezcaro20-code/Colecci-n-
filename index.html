@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0e0e12">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Mi colección Pokémon</title>
+<style>
+:root{--bg:#f4f4f6;--fg:#16161a;--mut:#6b6b76;--card:#ffffff;--lock:#15151a;--lockfg:#3a3a46;--acc:#e63946;--ok:#2a9d5c;--bd:#dcdce2;color-scheme:light;box-sizing:border-box}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e0e12;--fg:#f1f1f4;--mut:#9a9aa6;--card:#1a1a21;--lock:#050507;--lockfg:#2c2c36;--bd:#2a2a33;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0e0e12;--fg:#f1f1f4;--mut:#9a9aa6;--card:#1a1a21;--lock:#050507;--lockfg:#2c2c36;--bd:#2a2a33;color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:12px 14px 8px;z-index:5;border-bottom:1px solid var(--bd)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:10}
+h1{font-size:18px;margin:0 0 8px}
+.tabs{display:flex;gap:6px;margin-bottom:8px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tab{flex:1 0 auto;white-space:nowrap;padding:9px 12px;border:1px solid var(--bd);background:var(--card);color:var(--fg);border-radius:10px;font-size:13px;font-weight:600;cursor:pointer}
+.tab.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.bar{height:8px;background:var(--bd);border-radius:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s}
+.stat{display:flex;justify-content:space-between;font-size:13px;color:var(--mut);margin:6px 0 8px}
+.chips{display:flex;gap:6px}
+.chip{padding:5px 12px;border-radius:20px;border:1px solid var(--bd);background:transparent;color:var(--fg);font-size:12px;cursor:pointer}
+.chip.on{background:var(--fg);color:var(--bg)}
+main{padding:12px 14px calc(40px + env(safe-area-inset-bottom,0px))}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px}
+.slot{aspect-ratio:5/7;border-radius:8px;position:relative;overflow:hidden;cursor:pointer;border:1px solid var(--bd);background:var(--lock);display:flex;align-items:center;justify-content:center;padding:0}
+.slot .n{font-size:15px;font-weight:700;color:var(--lockfg)}
+.slot .lk{position:absolute;top:4px;right:5px;font-size:11px;color:var(--lockfg)}
+.slot .nm{position:absolute;left:3px;right:3px;bottom:5px;font-size:9.5px;line-height:1.15;text-align:center;color:#7c7c8a;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.slot img{width:100%;height:100%;object-fit:cover;display:block}
+.slot img.ref{position:absolute;inset:0;filter:grayscale(1) brightness(.6) contrast(1.05);transition:filter .6s}
+.slot img.ref.col{filter:none}
+.slot .n,.slot .lk,.slot .nm{z-index:1}
+.slot.has .n{display:none}
+.slot.has .nm{color:#fff;background:rgba(0,0,0,.6);border-radius:4px;padding:1px 3px}
+.slot.has .lk{color:#fff;text-shadow:0 0 3px #000}
+.slot .tag{position:absolute;top:3px;left:3px;background:rgba(0,0,0,.65);color:#fff;font-size:10px;padding:1px 5px;border-radius:6px}
+.slot .tag.q{left:auto;right:3px;top:auto;bottom:3px;background:var(--ok)}
+.slot.own .lk{color:#fff;background:var(--ok);border-radius:8px;padding:0 4px;text-shadow:none}
+.slot.own.has .nm{display:none}
+.slot.own .n{color:var(--ok)}
+.slot.own .nm{color:var(--fg)}
+.slot.own{border-color:var(--ok)}
+.hint{font-size:12px;color:var(--mut);margin:0 0 10px}
+dialog{border:1px solid var(--bd);border-radius:14px;background:var(--card);color:var(--fg);padding:16px;max-width:300px;width:88%}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+dialog h2{font-size:16px;margin:0 0 4px}
+dialog img{width:100%;border-radius:8px;margin:8px 0}
+.btn{display:block;width:100%;padding:11px;margin-top:8px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--fg);font-size:14px;cursor:pointer}
+.btn.p{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+.btn.d{color:var(--acc)}
+#msg{font-size:12px;color:var(--acc);min-height:16px;margin-top:6px}
+#live{position:fixed;inset:0;z-index:50;background:#000;color:#fff}
+#live[hidden]{display:none}
+#lv{width:100%;height:100%;object-fit:cover;display:block}
+#lvFrame{position:absolute;left:10%;right:10%;top:16%;bottom:16%;border:2px dashed rgba(255,255,255,.55);border-radius:12px;pointer-events:none}
+#lvTop,#lvBot{position:absolute;left:0;right:0;padding:12px 14px;display:flex;gap:8px;align-items:center;justify-content:space-between;background:rgba(0,0,0,.6);font-size:13px}
+#lvTop{top:0;padding-top:calc(12px + env(safe-area-inset-top,0px))}
+#lvBot{bottom:0;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+#live .chip{color:#fff;border-color:#fff;flex:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Mi colección Pokémon</h1>
+  <div class="tabs" id="tabs"></div>
+  <div class="bar"><i id="fill"></i></div>
+  <div class="stat"><span id="cnt"></span><span id="pct"></span></div>
+  <div class="chips" id="chips"></div>
+  <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
+    <input id="search" type="search" placeholder="Buscar carta por nombre o número…" style="flex:1;min-width:150px;padding:9px;border:1px solid var(--bd);border-radius:9px;background:var(--card);color:var(--fg)">
+    <button class="chip on" id="scanBtn" type="button">📷 Escanear carta</button>
+    <button class="chip on" id="liveBtn" type="button">⚡ Ráfaga</button>
+    <button class="chip" id="exportBtn" type="button">Exportar copia</button>
+    <button class="chip" id="importBtn" type="button">Importar copia</button>
+    <input id="importFile" type="file" accept="application/json,.json" hidden>
+  </div>
+</header>
+<main>
+  <p class="hint">Escanea una carta o tócala para marcarla como tuya. Las que te faltan se ven en blanco y negro; al desbloquearlas aparecen a todo color.</p>
+  <div id="extraStats" class="hint" style="margin-bottom:10px"></div>
+  <div class="grid" id="grid"></div>
+  <div id="msg"></div>
+</main>
+<input type="file" id="scanFile" accept="image/*" capture="environment" hidden>
+<dialog id="dlg"><h2 id="dt"></h2><div id="db"></div></dialog>
+<div id="live" hidden>
+  <video id="lv" playsinline muted autoplay></video>
+  <div id="lvFrame"></div>
+  <div id="lvTop"><span id="lvSt">Preparando…</span><button class="chip" id="lvClose" type="button">Cerrar</button></div>
+  <div id="lvBot"><span id="lvLast"></span><button class="chip" id="lvUndo" type="button" hidden>Deshacer</button></div>
+</div>
+<script>
+/* AÑADIR UNA COLECCIÓN: copia un bloque {…} al final de la lista y cambia:
+   id    = código corto en minúsculas, único (p. ej. "m5")
+   code  = código impreso en la carta (p. ej. "M5"); ayuda al escáner cuando dos sets tienen el mismo total
+   name  = nombre que se ve en la pestaña
+   total = número total de cartas (el /092 impreso)
+   main  = cartas de la numeración normal (el resto son rarezas especiales)
+   rar   = rarezas especiales: [primer número, "etiqueta"]
+   names = nombres separados por | (uno por número de carta, en orden; puede ir vacío) */
+var SETS=[{id:"m1s",code:"M1S",name:"Mega Symphonia",total:92,main:63,rar:[[64,"AR"],[76,"SR"],[87,"SAR"],[92,"MUR"]],names:"Tangela|Tangrowth|Chikorita|Bayleef|Meganium|Shuckle|Nincada|Ninjask|Dhelmise|Litleo|Pyroar|Sizzlipede|Centiskorch|Chi-Yu|Mantine|Kyogre|Snover|Mega Abomasnow ex|Clauncher|Clawitzer|Sobble|Drizzile|Inteleon|Snom|Frosmoth|Eiscue|Magnemite|Magneton|Magnezone|Raikou|Electrike|Mega Manectric ex|Pachirisu|Helioptile|Heliolisk|Abra|Kadabra|Alakazam|Jynx|Ralts|Kirlia|Mega Gardevoir ex|Shedinja|Spoink|Grumpig|Xerneas|Greavard|Houndstone|Mega Latias ex|Latios|Mega Kangaskhan ex|Delibird|Buneary|Lopunny|Stufful|Bewear|Spooky Watch|Mega Signal|Acerola’s Mischief|Wally’s Compassion|Vitality Forest|Surfing Beach|Mystery Garden|Shuckle|Ninjask|Litleo|Snover|Clawitzer|Inteleon|Helioptile|Alakazam|Shedinja|Houndstone|Delibird|Stufful|Mega Abomasnow ex|Mega Manectric ex|Mega Gardevoir ex|Mega Latias ex|Mega Kangaskhan ex|Buddy-Buddy Poffin|Rare Candy|Mega Signal|Acerola’s Mischief|Wally’s Compassion|Mystery Garden|Mega Gardevoir ex|Mega Latias ex|Mega Kangaskhan ex|Acerola’s Mischief|Wally’s Compassion|Mega Gardevoir ex".split("|")},{id:"m4",code:"M4",name:"Ninja Spinner",total:120,main:83,rar:[[84,"AR"],[96,"SR"],[114,"SAR"],[120,"MUR"]],names:"Weedle|Kakuna|Beedrill ex|Carnivine|Chespin|Quilladin|Chesnaught|Vulpix|Ninetales|Ho-Oh|Fennekin|Braixen|Delphox|Litleo|Mega Pyroar ex|Remoraid|Octillery|Delibird|Keldeo|Froakie|Frogadier|Mega Greninja ex|Bergmite|Avalugg|Wimpod|Golisopod|Mareep|Flaaffy|Ampharos|Emolga|Deoxys Normal|Deoxys Attack|Deoxys Defense|Deoxys Speed|Mega Floette ex|Espurr|Meowstic|Phantump|Trevenant|Pumpkaboo|Gourgeist ex|Xerneas|Sudowoodo|Phanpy|Donphan|Baltoy|Claydol|Zubat|Golbat|Crobat|Qwilfish|Stunky|Skuntank|Trubbish|Garbodor|Skrelp|Beldum|Metang|Metagross|Ferroseed|Ferrothorn|Cobalion ex|Mega Dragalge ex|Goomy|Sliggoo|Goodra|Tauros|Patrat|Watchog|Minccino|Cinccino ex|Special Red Card|Big Catching Net|Tomes of Transformation|AZ’s Tranquility|Philippe|Roxie’s Performance|Emma|Ange Floette|Prism Tower|Nitro Fire Energy|Bubble Water Energy|Magnet Metal Energy|Chespin|Fennekin|Froakie|Frogadier|Ampharos|Xerneas|Claydol|Crobat|Metang|Sliggoo|Tauros|Watchog|Beedrill ex|Mega Pyroar ex|Mega Greninja ex|Mega Floette ex|Gourgeist ex|Cobalion ex|Mega Dragalge ex|Cinccino ex|Energy Retrieval|Jumbo Ice Cream|Special Red Card|Tool Scrapper|AZ’s Tranquility|Philippe|Roxie’s Performance|Emma|Surfing Beach|Prism Tower|Mega Greninja ex|Mega Floette ex|Mega Dragalge ex|Cinccino ex|AZ’s Tranquility|Roxie’s Performance|Mega Greninja ex".split("|")}];
+var cur=0,filter="all",pending=null,col=emptyCol(),unlocking=null,scan=null,tessP=null;
+function emptyCol(){var d={};SETS.forEach(function(s){d[s.id]={}});return d}
+function pad(n){return ("00"+n).slice(-3)}
+function imgUrl(s,i){return "https://assets.dittobase.com/tcg/cards/ja/"+s.id.toUpperCase()+"/"+pad(i)+".jpg"}
+function rarOf(s,i){var t="";s.rar.forEach(function(x){if(i>=x[0])t=x[1]});return t}
+function addOwned(d,s,k,c){if(!/^\d{3}$/.test(k)||+k<1||+k>s.total)return false;c=Math.floor(+c);d[s.id][k]=(c>=1&&c<=999)?c:1;return true}
+function saveCol(){
+  try{localStorage.setItem("pk-own",JSON.stringify({v:5,own:col}));document.getElementById("msg").textContent="";return true}
+  catch(e){document.getElementById("msg").textContent="No se pudo guardar: almacenamiento bloqueado.";return false}
+}
+function loadCol(){
+  col=emptyCol();
+  try{
+    var r=localStorage.getItem("pk-own");
+    if(r){var o=JSON.parse(r).own||{};SETS.forEach(function(s){var x=o[s.id]||{};Object.keys(x).forEach(function(k){addOwned(col,s,k,x[k])})});return}
+    /* Migración desde v2/v3/v4: solo se aprovecha qué cartas tenías y cuántas copias; las fotos antiguas no se tocan ni se borran */
+    var m=localStorage.getItem("pk-meta"),p=localStorage.getItem("pk-col");
+    if(m){var mo=JSON.parse(m);SETS.forEach(function(s){((mo.own&&mo.own[s.id])||[]).forEach(function(k){addOwned(col,s,k,mo.qty&&mo.qty[s.id]&&mo.qty[s.id][k])})});saveCol()}
+    else if(p){var po=JSON.parse(p);SETS.forEach(function(s){Object.keys(po[s.id]||{}).forEach(function(k){addOwned(col,s,k,po._qty&&po._qty[s.id]&&po._qty[s.id][k])})});saveCol()}
+  }catch(e){col=emptyCol()}
+}
+function render(){
+  var s=SETS[cur],own=col[s.id],have=Object.keys(own).length,search=(document.getElementById("search")?.value||"").trim().toLowerCase();
+  document.getElementById("tabs").innerHTML=SETS.map(function(x,i){return '<button class="tab'+(i===cur?' on':'')+'" data-i="'+i+'">'+x.name+'</button>'}).join("");
+  document.getElementById("chips").innerHTML=[["all","Todas"],["own","Tengo"],["miss","Faltan"]].map(function(c){return '<button class="chip'+(filter===c[0]?' on':'')+'" data-f="'+c[0]+'">'+c[1]+'</button>'}).join("");
+  document.getElementById("cnt").textContent=have+" de "+s.total+" cartas · faltan "+(s.total-have);
+  var p=Math.round(have/s.total*100);
+  document.getElementById("pct").textContent=p+" %";
+  document.getElementById("fill").style.width=p+"%";
+  var totalCopies=Object.keys(own).reduce(function(a,k){return a+own[k]},0);
+  var duplicates=Object.keys(own).reduce(function(a,k){return a+Math.max(0,own[k]-1)},0);
+  document.getElementById("extraStats").textContent="Copias registradas: "+totalCopies+" · Duplicadas: "+duplicates;
+  var h="";
+  for(var i=1;i<=s.total;i++){
+    var k=pad(i),q=own[k]||0,o=q>0;
+    var nm=s.names[i-1]||"",rr=rarOf(s,i),tag=rr?'<span class="tag">'+rr+'</span>':'';
+    if(filter==="own"&&!o)continue;
+    if(filter==="miss"&&o)continue;
+    if(search&&!((nm+" "+k+" "+rr).toLowerCase().includes(search)))continue;
+    h+='<button class="slot'+(o?' own':'')+'" data-k="'+k+'" title="'+nm+'"><img class="ref'+(o&&unlocking!==k?' col':'')+'" src="'+imgUrl(s,i)+'" alt="" loading="lazy" onload="this.parentNode.classList.add(\'has\')" onerror="this.remove()"><span class="n">'+k+'</span><span class="nm">'+nm+'</span><span class="lk">'+(o?'✓':'🔒')+'</span>'+tag+(q>1?'<span class="tag q">×'+q+'</span>':'')+'</button>';
+  }
+  document.getElementById("grid").innerHTML=h;
+}
+function unlockFx(k){
+  unlocking=k;render();
+  var el=document.querySelector('[data-k="'+k+'"]');
+  if(!el){unlocking=null;return}
+  el.scrollIntoView({block:"center",behavior:"smooth"});
+  setTimeout(function(){var im=el.querySelector("img.ref");if(im)im.classList.add("col");unlocking=null},250);
+}
+function focusSlot(k){var el=document.querySelector('[data-k="'+k+'"]');if(el)el.scrollIntoView({block:"center",behavior:"smooth"})}
+function dialog(title,html){document.getElementById("dt").textContent=title;document.getElementById("db").innerHTML=html;var d=document.getElementById("dlg");if(!d.open)d.showModal()}
+function closeD(){var d=document.getElementById("dlg");if(d.open)d.close()}
+function cardDialog(s,k){
+  var q=col[s.id][k]||0,title=s.name+" · "+k+" · "+(s.names[+k-1]||"");
+  var img='<img src="'+imgUrl(s,+k)+'" alt=""'+(q?'':' style="filter:grayscale(1) brightness(.7)"')+' onerror="this.remove()">';
+  if(q)dialog(title,img+'<p style="text-align:center">Copias que tienes: <strong>'+q+'</strong></p><div style="display:flex;gap:8px"><button class="btn" data-a="minus">−</button><button class="btn" data-a="plus">+</button></div><button class="btn d" data-a="del">Quitar de mi colección</button><button class="btn" data-a="close">Cerrar</button>');
+  else dialog(title,img+'<button class="btn p" data-a="own">Tengo esta carta</button><button class="btn" data-a="close">Cerrar</button>');
+}
+document.addEventListener("click",function(e){
+  var t=e.target.closest("[data-i],[data-f],[data-k],[data-a]");if(!t)return;
+  var s=SETS[cur];
+  if(t.dataset.i!==undefined){cur=+t.dataset.i;filter="all";render()}
+  else if(t.dataset.f){filter=t.dataset.f;render()}
+  else if(t.dataset.k){pending=t.dataset.k;cardDialog(s,pending)}
+  else if(t.dataset.a==="own"){col[s.id][pending]=1;if(!saveCol()){delete col[s.id][pending];render()}else{closeD();unlockFx(pending)}}
+  else if(t.dataset.a==="plus"){col[s.id][pending]=Math.min(999,(col[s.id][pending]||1)+1);saveCol();render();cardDialog(s,pending)}
+  else if(t.dataset.a==="minus"){col[s.id][pending]=Math.max(1,(col[s.id][pending]||1)-1);saveCol();render();cardDialog(s,pending)}
+  else if(t.dataset.a==="del"){delete col[s.id][pending];saveCol();closeD();render()}
+  else if(t.dataset.a==="close"){closeD()}
+  else if(t.dataset.a==="scansave"){
+    if(!scan)return;
+    var si=+document.getElementById("scSet").value,n=Math.floor(+document.getElementById("scNum").value),ss=SETS[si];
+    if(!n||n<1||n>ss.total)return;
+    var sk=pad(n);cur=si;filter="all";document.getElementById("search").value="";closeD();
+    if(col[ss.id][sk]){col[ss.id][sk]=Math.min(999,col[ss.id][sk]+1);saveCol();render();focusSlot(sk)}
+    else{col[ss.id][sk]=1;if(!saveCol()){delete col[ss.id][sk];render()}else unlockFx(sk)}
+  }
+});
+document.getElementById("search").addEventListener("input",render);
+document.getElementById("exportBtn").addEventListener("click",function(){
+  var blob=new Blob([JSON.stringify({app:"Mi colección Pokémon",version:5,exportedAt:new Date().toISOString(),own:col},null,2)],{type:"application/json"});
+  var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="copia-coleccion-pokemon.json";a.click();URL.revokeObjectURL(a.href);
+});
+function cleanImport(p){
+  var d=emptyCol(),n=0,src=p.own||p.data||p,qs=src._qty||{};
+  SETS.forEach(function(s){
+    var x=src[s.id];if(!x||typeof x!=="object")return;
+    Object.keys(x).forEach(function(k){
+      /* copias nuevas (v5): x[k] es el número; copias antiguas (con fotos): el número está en _qty */
+      var c=p.own?x[k]:(qs[s.id]&&qs[s.id][k]);
+      if(addOwned(d,s,k,c))n++;
+    });
+  });
+  return{d:d,n:n,ok:SETS.some(function(s){return src[s.id]&&typeof src[s.id]==="object"})};
+}
+document.getElementById("importBtn").addEventListener("click",function(){document.getElementById("importFile").click()});
+document.getElementById("importFile").addEventListener("change",function(e){
+  var f=e.target.files[0];e.target.value="";if(!f)return;
+  var r=new FileReader();r.onload=function(){try{
+    var c=cleanImport(JSON.parse(r.result));
+    if(!c.ok)throw new Error("Formato no válido");
+    if(!confirm("La importación sustituirá los datos actuales de la colección ("+c.n+" cartas en la copia). ¿Continuar?"))return;
+    var prev=col;col=c.d;
+    if(!saveCol()){col=prev;render();return}
+    render();alert("Copia restaurada correctamente.");
+  }catch(err){alert("No se pudo importar el archivo. Comprueba que sea una copia válida.")}};
+  r.readAsText(f);
+});
+/* ---- Escáner: lee el número impreso (p. ej. 012/092) con OCR en el propio dispositivo y desbloquea la carta ---- */
+function loadTess(){
+  if(window.Tesseract)return Promise.resolve();
+  if(tessP)return tessP;
+  tessP=new Promise(function(ok,ko){var sc=document.createElement("script");sc.src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";sc.onload=ok;sc.onerror=function(){tessP=null;ko(new Error("cdn"))};document.head.appendChild(sc)});
+  return tessP;
+}
+function canvasFrom(im,fy){
+  var w=Math.min(1400,im.width),sc=w/im.width,hh=Math.round(im.height*sc),y0=Math.round(hh*fy),c=document.createElement("canvas");
+  c.width=w;c.height=hh-y0;c.getContext("2d").drawImage(im,0,y0/sc,im.width,im.height-y0/sc,0,0,w,hh-y0);return c;
+}
+function codeIn(txt,s){return !!s.code&&new RegExp("(^|[^A-Za-z0-9])"+s.code+"([^A-Za-z0-9]|$)","i").test(txt)}
+function parseCard(txt){
+  var res={si:-1,n:0,amb:[]},t=txt.replace(/[Oo]/g,"0"),re=/(\d{3})\s*[\/lI|]\s*(\d{3})/g,m,byCode=-1;
+  SETS.forEach(function(s,i){if(byCode<0&&codeIn(txt,s))byCode=i});
+  while((m=re.exec(t))){
+    var tot=+m[2],num=+m[1],c=[];
+    SETS.forEach(function(s,i){if(s.total===tot&&num>=1&&num<=tot)c.push(i)});
+    if(!c.length)continue;
+    var wc=c.filter(function(i){return codeIn(txt,SETS[i])});
+    if(wc.length===1)return{si:wc[0],n:num,amb:[]};
+    if(c.length===1)return{si:c[0],n:num,amb:[]};
+    return{si:c[0],n:num,amb:c};
+  }
+  if(byCode>=0)res.si=byCode;
+  return res;
+}
+function setSt(t){var el=document.getElementById("scst");if(el)el.textContent=t}
+function scanInfo(){
+  var a=document.getElementById("scSet"),b=document.getElementById("scNum"),el=document.getElementById("scInfo"),im=document.getElementById("scImg");
+  if(!a||!b||!el)return;
+  var s=SETS[+a.value],n=Math.floor(+b.value);
+  if(!n||n<1||n>s.total){el.textContent="Número entre 1 y "+s.total;if(im)im.style.display="none";return}
+  var k=pad(n);el.textContent=k+" · "+(s.names[n-1]||"")+(col[s.id][k]?" · ya la tienes: se sumará una copia":"");
+  if(im){im.style.display="block";im.onerror=function(){im.style.display="none"};im.src=imgUrl(s,n)}
+}
+function showScan(){
+  if(!scan||!document.getElementById("dlg").open)return;
+  var st="width:100%;padding:9px;border-radius:9px;border:1px solid var(--bd);background:var(--card);color:var(--fg)";
+  var opts=SETS.map(function(s,i){return '<option value="'+i+'"'+(i===scan.si?' selected':'')+'>'+s.name+'</option>'}).join("");
+  var msg=scan.err?"No se pudo cargar el lector (¿sin conexión?). Indica la carta a mano.":(scan.amb&&scan.amb.length>1)?"Varias colecciones tienen ese total ("+scan.amb.map(function(i){return SETS[i].name}).join(", ")+"). Elige la correcta:":scan.ok?"Carta detectada. Comprueba que la imagen es la tuya:":"No he podido leer el número. Indícalo a mano:";
+  dialog("Carta escaneada",'<img id="scImg" alt="" style="display:none"><p class="hint">'+msg+'</p><select id="scSet" style="'+st+'">'+opts+'</select><input id="scNum" type="number" min="1" inputmode="numeric" value="'+(scan.n||"")+'" placeholder="Número de carta" style="'+st+';margin-top:8px"><p id="scInfo" class="hint" style="margin-top:8px"></p><button class="btn p" data-a="scansave">Desbloquear carta</button><button class="btn" data-a="close">Cancelar</button>');
+  scanInfo();
+}
+function runOcr(im,id){
+  setSt("Cargando lector de texto…");
+  var lg={logger:function(m){if(scan&&scan.id===id&&m.status==="recognizing text")setSt("Leyendo carta… "+Math.round(m.progress*100)+" %")}};
+  loadTess().then(function(){
+    return Tesseract.recognize(canvasFrom(im,0.7),"eng",lg).then(function(r){
+      var p=parseCard(r.data.text);
+      if(p.n)return p;
+      return Tesseract.recognize(canvasFrom(im,0),"eng",lg).then(function(r2){return parseCard(r2.data.text)});
+    });
+  }).then(function(p){
+    if(!scan||scan.id!==id)return;
+    if(p.si>=0)scan.si=p.si;
+    scan.n=p.n;scan.ok=!!p.n;scan.amb=p.amb||[];showScan();
+  }).catch(function(){if(scan&&scan.id===id){scan.err=true;showScan()}});
+}
+document.getElementById("scanBtn").addEventListener("click",function(){document.getElementById("scanFile").click()});
+document.getElementById("scanFile").addEventListener("change",function(e){
+  var f=e.target.files[0];e.target.value="";if(!f)return;
+  var id=Date.now();scan={id:id,si:cur,n:0,amb:[]};
+  dialog("Escaneando carta",'<p id="scst" class="hint" style="text-align:center">Preparando…</p><button class="btn" data-a="close">Cancelar</button>');
+  var url=URL.createObjectURL(f),im=new Image();
+  im.onload=function(){URL.revokeObjectURL(url);if(scan&&scan.id===id)runOcr(im,id)};
+  im.onerror=function(){URL.revokeObjectURL(url);if(scan&&scan.id===id){scan.err=true;showScan()}};
+  im.src=url;
+});
+document.addEventListener("input",function(e){if(e.target.id==="scNum")scanInfo()});
+document.addEventListener("change",function(e){if(e.target.id==="scSet")scanInfo()});
+document.getElementById("dlg").addEventListener("close",function(){scan=null});
+/* ---- Ráfaga: la cámara se queda abierta y lee las cartas una tras otra (necesita https) ---- */
+var live=null;
+function liveSt(t){var el=document.getElementById("lvSt");if(el)el.textContent=t}
+function liveStop(){
+  var me=live;live=null;
+  document.getElementById("live").hidden=true;
+  if(!me)return;
+  clearTimeout(me.timer);
+  try{me.stream.getTracks().forEach(function(t){t.stop()})}catch(e){}
+  try{if(me.worker)me.worker.terminate()}catch(e){}
+  document.getElementById("lv").srcObject=null;
+  render();
+}
+function liveStart(){
+  if(live)return;
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert("Este navegador no permite abrir la cámara desde la app (hace falta https). Usa «Escanear carta».");return}
+  navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},audio:false}).then(function(stream){
+    var me={stream:stream,worker:null,n:0,miss:0,cnt:0,last:null,locked:null,added:0,undo:null,timer:null};
+    live=me;
+    var v=document.getElementById("lv");v.srcObject=stream;if(v.play)v.play().catch(function(){});
+    document.getElementById("live").hidden=false;
+    document.getElementById("lvUndo").hidden=true;document.getElementById("lvLast").textContent="";
+    liveSt("Cargando lector de texto…");
+    return loadTess().then(function(){return Tesseract.createWorker("eng")}).then(function(w){
+      if(live!==me){w.terminate();return}
+      me.worker=w;liveSt("Apunta al número de la carta (abajo a la izquierda)");liveTick(me);
+    });
+  }).catch(function(){liveStop();alert("No se pudo abrir la cámara o cargar el lector. Necesita permiso de cámara, conexión segura (https) y conexión a internet la primera vez.")});
+}
+function liveAccept(me,p){
+  var s=SETS[p.si],k=pad(p.n),was=col[s.id][k]||0;
+  col[s.id][k]=Math.min(999,was+1);
+  if(!saveCol()){if(was)col[s.id][k]=was;else delete col[s.id][k];liveSt("No se pudo guardar");return}
+  me.undo={sid:s.id,k:k,was:was};me.added++;
+  document.getElementById("lvLast").textContent="✓ "+s.name+" · "+k+" · "+(s.names[p.n-1]||"")+(was?" (×"+(was+1)+")":"")+" — "+me.added+" en esta sesión";
+  document.getElementById("lvUndo").hidden=false;
+  try{if(navigator.vibrate)navigator.vibrate(60)}catch(e){}
+  render();
+}
+function liveTick(me){
+  if(live!==me)return;
+  var v=document.getElementById("lv");
+  if(!v.videoWidth){me.timer=setTimeout(function(){liveTick(me)},300);return}
+  var w=Math.min(1280,v.videoWidth),hh=Math.round(v.videoHeight*w/v.videoWidth),full=document.createElement("canvas");
+  full.width=w;full.height=hh;full.getContext("2d").drawImage(v,0,0,w,hh);
+  var cv=full;
+  if(me.n++%2===0){var y0=Math.round(hh*0.6),c2=document.createElement("canvas");c2.width=w;c2.height=hh-y0;c2.getContext("2d").drawImage(full,0,y0,w,hh-y0,0,0,w,hh-y0);cv=c2}
+  me.worker.recognize(cv).then(function(r){
+    if(live!==me)return;
+    var p=parseCard(r.data.text),key=(p.n&&p.si>=0&&p.amb.length<2)?p.si+"/"+p.n:null;
+    if(!key){
+      me.miss++;
+      if(me.miss>=3){me.locked=null;me.last=null;me.cnt=0;liveSt("Apunta al número de la carta (abajo a la izquierda)")}
+      if(p.n&&p.amb.length>1)liveSt("Varias colecciones comparten ese total: usa «Escanear carta»");
+    }else{
+      me.miss=0;
+      if(key===me.last)me.cnt++;else{me.last=key;me.cnt=1}
+      if(me.cnt>=2&&me.locked!==key){me.locked=key;liveAccept(me,p)}
+    }
+    me.timer=setTimeout(function(){liveTick(me)},150);
+  }).catch(function(){if(live===me){liveSt("Error leyendo la imagen");me.timer=setTimeout(function(){liveTick(me)},1000)}});
+}
+document.getElementById("liveBtn").addEventListener("click",liveStart);
+document.getElementById("lvClose").addEventListener("click",liveStop);
+document.getElementById("lvUndo").addEventListener("click",function(){
+  if(!live||!live.undo)return;
+  var u=live.undo;
+  if(u.was)col[u.sid][u.k]=u.was;else delete col[u.sid][u.k];
+  saveCol();render();live.undo=null;live.added=Math.max(0,live.added-1);
+  document.getElementById("lvUndo").hidden=true;document.getElementById("lvLast").textContent="Deshecho: "+u.k;
+});
+document.addEventListener("visibilitychange",function(){if(document.hidden&&live)liveStop()});
+/* ---- App instalable: registra el service worker solo si se abre desde https ---- */
+if("serviceWorker" in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}
+loadCol();render();
+</script>
+</body>
+</html>
