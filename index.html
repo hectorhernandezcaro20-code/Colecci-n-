@@ -102,7 +102,7 @@ dialog img{width:100%;border-radius:8px;margin:8px 0}
   </div>
 </header>
 <main>
-  <p class="hint">Escanea una carta (v7.2) o tócala para marcarla como tuya. Para escanear, acerca la cámara a la mitad inferior de la carta, con buena luz y sin reflejos. Las que te faltan se ven en blanco y negro; al desbloquearlas aparecen a todo color.</p>
+  <p class="hint">Escanea una carta (v7.4) o tócala para marcarla como tuya. Para escanear, acerca la cámara a la mitad inferior de la carta, con buena luz y sin reflejos. Las que te faltan se ven en blanco y negro; al desbloquearlas aparecen a todo color.</p>
   <div id="extraStats" class="hint" style="margin-bottom:10px"></div>
   <div class="grid" id="grid"></div>
   <div id="msg"></div>
@@ -360,7 +360,7 @@ function adaptBin(g,w,h,C){
       o[y*w+x]=s[y*w+x]>mean-C?255:0}}
   return o;
 }
-var APPV="7.2",ocrW=null,CFGS=[[50,41,3],[64,41,3],[30,31,4],[40,41,2],[52,0,8,"adapt"],[64,0,0,"plain"],[40,0,16,"adapt"]];
+var APPV="7.4",ocrW=null,CFGS=[[50,41,3],[64,41,3],[30,31,4],[40,41,2],[52,0,8,"adapt"],[64,0,0,"plain"],[40,0,16,"adapt"]];
 function getWorker(){
   if(ocrW)return ocrW;
   ocrW=loadTess().then(function(){return Tesseract.createWorker("eng")}).then(function(w){return Promise.resolve(w.setParameters({tessedit_pageseg_mode:"7"})).then(function(){return w})});
@@ -407,10 +407,10 @@ function wideRead(src,sw,sh,o){
     function done(){var b=best();return setPsm(w,"7").then(function(){return b?b.p:null})}
     function step(){
       if(o.alive&&!o.alive())return setPsm(w,"7").then(function(){return null});
-      var b=best();if((b&&b.n>=2)||i>=WIDE.length)return done();
+      var b=best();if((b&&b.n>=(o.fast?1:2))||i>=WIDE.length)return done();
       var c=WIDE[i++];
       if(o.progress)o.progress(i,WIDE.length);
-      var sc=1666*c[0]/sw,cvs=cropRect(src,sw,sh,0,0.66*sh,0.68*sw,0.98*sh,sc,[c[1],c[2]]);
+      var rg=o.reg||[0,0.66,0.68,0.98],sc=1666*c[0]*(o.mul||1)/sw,cvs=cropRect(src,sw,sh,rg[0]*sw,rg[1]*sh,rg[2]*sw,rg[3]*sh,sc,[c[1],c[2]]);
       return setPsm(w,String(c[3])).then(function(){return w.recognize(cvs)}).then(function(r){
         if(o.onText)o.onText(r.data.text);
         var p=parseCard(r.data.text,true);
@@ -611,6 +611,14 @@ function liveStop(){
   document.getElementById("lv").srcObject=null;
   render();
 }
+function liveLayout(me){
+  var v=document.getElementById("lv"),f=document.getElementById("lvFrame"),vw=v.videoWidth,vh=v.videoHeight,cw=v.clientWidth,ch=v.clientHeight;
+  if(!vw||!vh||!cw||!ch){if(!me.reg){me.reg=[0,0.55,0.7,1];me.mul=1}return}
+  var s=Math.min(cw/vw,ch/vh),dw=vw*s,dh=vh*s,ox=(cw-dw)/2,oy=(ch-dh)/2;
+  var fw=0.6,fh=Math.min(0.92,fw*vw*1.4/vh),x0=(1-fw)/2,y0=(1-fh)/2;
+  f.style.cssText="left:"+(ox+x0*dw)+"px;top:"+(oy+y0*dh)+"px;width:"+(fw*dw)+"px;height:"+(fh*dh)+"px;right:auto;bottom:auto";
+  me.reg=[Math.max(0,x0-0.02),Math.max(0,y0+fh*0.72),Math.min(1,x0+fw*0.62),Math.min(1,y0+fh+0.02)];me.mul=1/fw;
+}
 function liveSchedule(me,ms){
   clearTimeout(me.timer);
   if(live!==me||!me.auto||me.pending)return;
@@ -621,15 +629,16 @@ function liveStart(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert("Este navegador no permite abrir la cámara desde la app (hace falta https). Usa «Escanear carta».");return}
   navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},audio:false}).then(function(stream){
     var track=stream.getVideoTracks()[0],ic=null;
+    try{track.applyConstraints({advanced:[{focusMode:"continuous"}]}).catch(function(){})}catch(e){}
     try{if(window.ImageCapture)ic=new ImageCapture(track)}catch(e){}
     var me={stream:stream,ic:ic,busy:false,pending:null,auto:true,added:0,ignore:null,timer:null};
     live=me;
-    var v=document.getElementById("lv");v.srcObject=stream;if(v.play)v.play().catch(function(){});
+    var v=document.getElementById("lv");v.srcObject=stream;v.onloadedmetadata=function(){if(live===me)liveLayout(me)};if(v.play)v.play().catch(function(){});
     document.getElementById("live").hidden=false;document.getElementById("lvRes").hidden=true;
     document.getElementById("lvAuto").textContent="Auto: sí";liveCnt();
     liveSt("Cargando lector de texto…");
     return getWorker().then(function(){
-      if(live!==me)return;
+      if(live!==me)return;liveLayout(me);
       liveSt("Encaja la carta ENTERA en el recuadro");liveSchedule(me,800);
     });
   }).catch(function(){liveStop();alert("No se pudo abrir la cámara o cargar el lector. Necesita permiso de cámara, conexión segura (https) e internet la primera vez.")});
@@ -645,12 +654,12 @@ function liveGrab(me){
 }
 function liveShot(me,manual){
   if(live!==me||me.busy||me.pending)return;
-  me.busy=true;clearTimeout(me.timer);liveSt("Leyendo…");
+  me.busy=true;clearTimeout(me.timer);liveSt("Leyendo…");liveLayout(me);
   var dbg=document.getElementById("lvDbg"),t0=Date.now(),txts=[],info="";
   liveGrab(me).then(function(g){
     info=g.how+" "+g.w+"x"+g.h;dbg.textContent=info+" · leyendo…";
     var al=function(){return live===me};
-    return wideRead(g.src,g.w,g.h,{alive:al,onText:function(t){txts.push(String(t).replace(/\s+/g," ").trim().slice(0,22))}}).then(function(p){
+    return wideRead(g.src,g.w,g.h,{alive:al,fast:true,reg:me.reg,mul:me.mul,onText:function(t){txts.push(String(t).replace(/\s+/g," ").trim().slice(0,22))}}).then(function(p){
       if(p||!al())return p;
       liveSt("Buscando el número con más calma…");
       return findNumber(g.src,g.w,g.h,{max:10,cfgs:3,loose:true,confirm:true,log:[],alive:al});
