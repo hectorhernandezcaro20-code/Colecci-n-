@@ -73,6 +73,15 @@ dialog img{width:100%;border-radius:8px;margin:8px 0}
 #lvTop{top:0;padding-top:calc(12px + env(safe-area-inset-top,0px))}
 #lvBot{bottom:0;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
 #live .chip{color:#fff;border-color:#fff;flex:none}
+#live .chip.on{background:var(--acc);border-color:var(--acc)}
+#lvFrame{top:22%;bottom:30%}
+#lvRes{position:absolute;left:12px;right:12px;bottom:calc(64px + env(safe-area-inset-bottom,0px));display:flex;gap:12px;padding:12px;border-radius:14px;background:rgba(20,20,26,.96);border:1px solid #3a3a46}
+#lvRes[hidden]{display:none}
+#lvImg{width:92px;aspect-ratio:5/7;object-fit:cover;border-radius:6px;background:#2a2a33;flex:none}
+#lvInfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+#lvTxt{font-size:13px;line-height:1.35}
+#lvBtns{display:flex;gap:8px}
+#lvBtns .btn{margin-top:0;padding:10px 6px;font-size:13px}
 </style>
 </head>
 <body>
@@ -85,14 +94,14 @@ dialog img{width:100%;border-radius:8px;margin:8px 0}
   <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
     <input id="search" type="search" placeholder="Buscar carta por nombre o número…" style="flex:1;min-width:150px;padding:9px;border:1px solid var(--bd);border-radius:9px;background:var(--card);color:var(--fg)">
     <button class="chip on" id="scanBtn" type="button">📷 Escanear carta</button>
-    <button class="chip on" id="liveBtn" type="button" hidden>⚡ Ráfaga</button>
+    <button class="chip on" id="liveBtn" type="button">⚡ Escaneo continuo</button>
     <button class="chip" id="exportBtn" type="button">Exportar copia</button>
     <button class="chip" id="importBtn" type="button">Importar copia</button>
     <input id="importFile" type="file" accept="application/json,.json" hidden>
   </div>
 </header>
 <main>
-  <p class="hint">Escanea una carta (v7.0) o tócala para marcarla como tuya. Para escanear, acerca la cámara a la mitad inferior de la carta, con buena luz y sin reflejos. Las que te faltan se ven en blanco y negro; al desbloquearlas aparecen a todo color.</p>
+  <p class="hint">Escanea una carta (v7.1) o tócala para marcarla como tuya. Para escanear, acerca la cámara a la mitad inferior de la carta, con buena luz y sin reflejos. Las que te faltan se ven en blanco y negro; al desbloquearlas aparecen a todo color.</p>
   <div id="extraStats" class="hint" style="margin-bottom:10px"></div>
   <div class="grid" id="grid"></div>
   <div id="msg"></div>
@@ -108,7 +117,11 @@ dialog img{width:100%;border-radius:8px;margin:8px 0}
   <video id="lv" playsinline muted autoplay></video>
   <div id="lvFrame"></div>
   <div id="lvTop"><span id="lvSt">Preparando…</span><button class="chip" id="lvClose" type="button">Cerrar</button></div>
-  <div id="lvBot"><span id="lvLast"></span><button class="chip" id="lvUndo" type="button" hidden>Deshacer</button></div>
+  <div id="lvRes" hidden>
+    <img id="lvImg" alt="">
+    <div id="lvInfo"><div id="lvTxt"></div><div id="lvBtns"><button class="btn p" id="lvOk" type="button">Sí, siguiente</button><button class="btn" id="lvNo" type="button">No es esa</button></div></div>
+  </div>
+  <div id="lvBot"><span id="lvCnt">0 cartas</span><span style="display:flex;gap:8px"><button class="chip" id="lvAuto" type="button">Auto: sí</button><button class="chip on" id="lvShot" type="button">Escanear</button></span></div>
 </div>
 <script>
 /* AÑADIR UNA COLECCIÓN: copia un bloque {…} al final de la lista y cambia:
@@ -345,7 +358,7 @@ function adaptBin(g,w,h,C){
       o[y*w+x]=s[y*w+x]>mean-C?255:0}}
   return o;
 }
-var APPV="7.0",ocrW=null,CFGS=[[50,41,3],[64,41,3],[30,31,4],[40,41,2],[52,0,8,"adapt"],[64,0,0,"plain"],[40,0,16,"adapt"]];
+var APPV="7.1",ocrW=null,CFGS=[[50,41,3],[64,41,3],[30,31,4],[40,41,2],[52,0,8,"adapt"],[64,0,0,"plain"],[40,0,16,"adapt"]];
 function getWorker(){
   if(ocrW)return ocrW;
   ocrW=loadTess().then(function(){return Tesseract.createWorker("eng")}).then(function(w){return Promise.resolve(w.setParameters({tessedit_pageseg_mode:"7"})).then(function(){return w})});
@@ -582,72 +595,94 @@ document.getElementById("pkCv").addEventListener("click",function(e){
 document.addEventListener("input",function(e){if(e.target.id==="scNum")scanInfo()});
 document.addEventListener("change",function(e){if(e.target.id==="scSet")scanInfo()});
 document.getElementById("dlg").addEventListener("close",function(){scan=null});
-/* ---- Ráfaga: la cámara se queda abierta y lee las cartas una tras otra (necesita https) ---- */
+/* ---- Escaneo continuo: visor abierto, foto de resolución completa sin salir de la app (necesita https) ---- */
 var live=null;
 function liveSt(t){var el=document.getElementById("lvSt");if(el)el.textContent=t}
+function liveCnt(){var n=live?live.added:0;document.getElementById("lvCnt").textContent=n+(n===1?" carta":" cartas")}
 function liveStop(){
   var me=live;live=null;
-  document.getElementById("live").hidden=true;
+  document.getElementById("live").hidden=true;document.getElementById("lvRes").hidden=true;
   if(!me)return;
   clearTimeout(me.timer);
   try{me.stream.getTracks().forEach(function(t){t.stop()})}catch(e){}
-  try{if(me.worker)me.worker.terminate()}catch(e){}
   document.getElementById("lv").srcObject=null;
   render();
+}
+function liveSchedule(me,ms){
+  clearTimeout(me.timer);
+  if(live!==me||!me.auto||me.pending)return;
+  me.timer=setTimeout(function(){liveShot(me,false)},ms);
 }
 function liveStart(){
   if(live)return;
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert("Este navegador no permite abrir la cámara desde la app (hace falta https). Usa «Escanear carta».");return}
   navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},audio:false}).then(function(stream){
-    var me={stream:stream,worker:null,n:0,miss:0,cnt:0,last:null,locked:null,added:0,undo:null,timer:null};
+    var track=stream.getVideoTracks()[0],ic=null;
+    try{if(window.ImageCapture)ic=new ImageCapture(track)}catch(e){}
+    var me={stream:stream,ic:ic,busy:false,pending:null,auto:true,added:0,ignore:null,timer:null};
     live=me;
     var v=document.getElementById("lv");v.srcObject=stream;if(v.play)v.play().catch(function(){});
-    document.getElementById("live").hidden=false;
-    document.getElementById("lvUndo").hidden=true;document.getElementById("lvLast").textContent="";
+    document.getElementById("live").hidden=false;document.getElementById("lvRes").hidden=true;
+    document.getElementById("lvAuto").textContent="Auto: sí";liveCnt();
     liveSt("Cargando lector de texto…");
     return getWorker().then(function(){
       if(live!==me)return;
-      liveSt("Acerca la cámara al número de la carta (abajo a la izquierda)");liveTick(me);
+      liveSt("Enseña la mitad inferior de la carta");liveSchedule(me,800);
     });
-  }).catch(function(){liveStop();alert("No se pudo abrir la cámara o cargar el lector. Necesita permiso de cámara, conexión segura (https) y conexión a internet la primera vez.")});
+  }).catch(function(){liveStop();alert("No se pudo abrir la cámara o cargar el lector. Necesita permiso de cámara, conexión segura (https) e internet la primera vez.")});
 }
-function liveAccept(me,p){
-  var s=SETS[p.si],k=pad(p.n),was=col[s.id][k]||0;
-  col[s.id][k]=Math.min(999,was+1);
-  if(!saveCol()){if(was)col[s.id][k]=was;else delete col[s.id][k];liveSt("No se pudo guardar");return}
-  me.undo={sid:s.id,k:k,was:was};me.added++;
-  document.getElementById("lvLast").textContent="✓ "+s.name+" · "+k+" · "+(s.names[p.n-1]||"")+(was?" (×"+(was+1)+")":"")+" — "+me.added+" en esta sesión";
-  document.getElementById("lvUndo").hidden=false;
-  try{if(navigator.vibrate)navigator.vibrate(60)}catch(e){}
-  render();
+function liveGrab(me){
+  var frame=function(){var v=document.getElementById("lv"),c=document.createElement("canvas");c.width=v.videoWidth;c.height=v.videoHeight;c.getContext("2d").drawImage(v,0,0);return {src:c,w:c.width,h:c.height,close:function(){}}};
+  if(!(me.ic&&me.ic.takePhoto))return Promise.resolve(frame());
+  return Promise.resolve(me.ic.getPhotoCapabilities()).then(function(cap){
+    var o={};if(cap&&cap.imageWidth&&cap.imageWidth.max)o.imageWidth=cap.imageWidth.max;return me.ic.takePhoto(o);
+  }).catch(function(){return me.ic.takePhoto()}).then(function(blob){
+    return createImageBitmap(blob).then(function(bm){return {src:bm,w:bm.width,h:bm.height,close:function(){try{bm.close()}catch(e){}}}});
+  }).catch(function(){return frame()});
 }
-function liveTick(me){
-  if(live!==me)return;
-  var v=document.getElementById("lv");
-  if(!v.videoWidth){me.timer=setTimeout(function(){liveTick(me)},300);return}
-  findNumber(v,v.videoWidth,v.videoHeight,{max:6,cfgs:2,loose:false,alive:function(){return live===me}}).then(function(p){
+function liveShot(me,manual){
+  if(live!==me||me.busy||me.pending)return;
+  me.busy=true;clearTimeout(me.timer);liveSt("Leyendo…");
+  liveGrab(me).then(function(g){
+    return wideRead(g.src,g.w,g.h,{alive:function(){return live===me}}).then(function(p){g.close();return p},function(e){g.close();throw e});
+  }).then(function(p){
+    me.busy=false;
     if(live!==me)return;
-    var key=(p&&p.n&&p.si>=0&&p.amb.length<2)?p.si+"/"+p.n:null;
-    if(!key){
-      me.miss++;
-      if(me.miss>=3){me.locked=null;me.last=null;me.cnt=0;liveSt("Acerca la cámara al número de la carta (abajo a la izquierda)")}
-      if(p&&p.n&&p.amb.length>1)liveSt("Varias colecciones comparten ese total: usa «Escanear carta»");
-    }else{
-      me.miss=0;
-      if(key===me.last)me.cnt++;else{me.last=key;me.cnt=1}
-      if(me.cnt>=2&&me.locked!==key){me.locked=key;liveAccept(me,p)}
-    }
-    me.timer=setTimeout(function(){liveTick(me)},150);
-  }).catch(function(){if(live===me){liveSt("Error leyendo la imagen");me.timer=setTimeout(function(){liveTick(me)},1000)}});
+    if(!p){me.ignore=null;liveSt(manual?"No la he leído. Acércate un poco y reintenta":"Enseña la mitad inferior de la carta");liveSchedule(me,900);return}
+    var key=p.si+"/"+p.n;
+    if(!manual&&key===me.ignore){liveSt("Pasa la siguiente carta");liveSchedule(me,1500);return}
+    liveAsk(me,p);
+  }).catch(function(){me.busy=false;if(live===me){liveSt("Error al leer. Reintentando…");liveSchedule(me,2000)}});
+}
+function liveAsk(me,p){
+  var s=SETS[p.si],k=pad(p.n),q=col[s.id][k]||0,img=document.getElementById("lvImg");
+  me.pending=p;
+  img.style.visibility="visible";img.onerror=function(){img.style.visibility="hidden"};img.src=imgUrl(s,p.n);
+  document.getElementById("lvTxt").textContent=s.name+" · "+k+(s.names[p.n-1]?" · "+s.names[p.n-1]:"")+(q?" (ya tienes "+q+")":"");
+  document.getElementById("lvRes").hidden=false;
+  liveSt("¿Es esta carta?");
+}
+function liveAnswer(yes){
+  var me=live;if(!me||!me.pending)return;
+  var p=me.pending,s=SETS[p.si],k=pad(p.n);
+  me.pending=null;me.ignore=p.si+"/"+p.n;
+  document.getElementById("lvRes").hidden=true;
+  if(yes){
+    var was=col[s.id][k]||0;col[s.id][k]=Math.min(999,was+1);
+    if(!saveCol()){if(was)col[s.id][k]=was;else delete col[s.id][k];liveSt("No se pudo guardar")}
+    else{me.added++;liveCnt();try{if(navigator.vibrate)navigator.vibrate(50)}catch(e){}render()}
+  }
+  liveSt("Pasa la siguiente carta");
+  liveSchedule(me,2500);
 }
 document.getElementById("liveBtn").addEventListener("click",liveStart);
 document.getElementById("lvClose").addEventListener("click",liveStop);
-document.getElementById("lvUndo").addEventListener("click",function(){
-  if(!live||!live.undo)return;
-  var u=live.undo;
-  if(u.was)col[u.sid][u.k]=u.was;else delete col[u.sid][u.k];
-  saveCol();render();live.undo=null;live.added=Math.max(0,live.added-1);
-  document.getElementById("lvUndo").hidden=true;document.getElementById("lvLast").textContent="Deshecho: "+u.k;
+document.getElementById("lvShot").addEventListener("click",function(){if(live)liveShot(live,true)});
+document.getElementById("lvOk").addEventListener("click",function(){liveAnswer(true)});
+document.getElementById("lvNo").addEventListener("click",function(){liveAnswer(false)});
+document.getElementById("lvAuto").addEventListener("click",function(){
+  if(!live)return;live.auto=!live.auto;this.textContent=live.auto?"Auto: sí":"Auto: no";
+  if(live.auto)liveSchedule(live,300);else clearTimeout(live.timer);
 });
 document.addEventListener("visibilitychange",function(){if(document.hidden&&live)liveStop()});
 /* ---- App instalable: registra el service worker solo si se abre desde https ---- */
