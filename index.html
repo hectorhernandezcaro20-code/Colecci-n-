@@ -75,6 +75,7 @@ dialog img{width:100%;border-radius:8px;margin:8px 0}
 #live .chip{color:#fff;border-color:#fff;flex:none}
 #live .chip.on{background:var(--acc);border-color:var(--acc)}
 #lvFrame{left:14%;right:14%;top:8%;bottom:24%}
+#lvThumb{position:absolute;left:8px;top:92px;height:46px;max-width:60%;border-radius:4px;border:1px solid #6a6;pointer-events:none;background:#000}
 #lvDbg{position:absolute;left:8px;right:8px;top:54px;font-size:10px;line-height:1.3;color:#cfd;background:rgba(0,0,0,.55);padding:3px 6px;border-radius:6px;word-break:break-all;pointer-events:none}
 #lvRes{position:absolute;left:12px;right:12px;bottom:calc(64px + env(safe-area-inset-bottom,0px));display:flex;gap:12px;padding:12px;border-radius:14px;background:rgba(20,20,26,.96);border:1px solid #3a3a46}
 #lvRes[hidden]{display:none}
@@ -102,7 +103,7 @@ dialog img{width:100%;border-radius:8px;margin:8px 0}
   </div>
 </header>
 <main>
-  <p class="hint">Escanea una carta (v7.4) o tócala para marcarla como tuya. Para escanear, acerca la cámara a la mitad inferior de la carta, con buena luz y sin reflejos. Las que te faltan se ven en blanco y negro; al desbloquearlas aparecen a todo color.</p>
+  <p class="hint">Escanea una carta (v7.5) o tócala para marcarla como tuya. Para escanear, acerca la cámara a la mitad inferior de la carta, con buena luz y sin reflejos. Las que te faltan se ven en blanco y negro; al desbloquearlas aparecen a todo color.</p>
   <div id="extraStats" class="hint" style="margin-bottom:10px"></div>
   <div class="grid" id="grid"></div>
   <div id="msg"></div>
@@ -117,7 +118,7 @@ dialog img{width:100%;border-radius:8px;margin:8px 0}
 <div id="live" hidden>
   <video id="lv" playsinline muted autoplay></video>
   <div id="lvFrame"></div>
-  <div id="lvDbg"></div>
+  <div id="lvDbg"></div><img id="lvThumb" alt="">
   <div id="lvTop"><span id="lvSt">Preparando…</span><button class="chip" id="lvClose" type="button">Cerrar</button></div>
   <div id="lvRes" hidden>
     <img id="lvImg" alt="">
@@ -360,7 +361,7 @@ function adaptBin(g,w,h,C){
       o[y*w+x]=s[y*w+x]>mean-C?255:0}}
   return o;
 }
-var APPV="7.4",ocrW=null,CFGS=[[50,41,3],[64,41,3],[30,31,4],[40,41,2],[52,0,8,"adapt"],[64,0,0,"plain"],[40,0,16,"adapt"]];
+var APPV="7.5",ocrW=null,CFGS=[[50,41,3],[64,41,3],[30,31,4],[40,41,2],[52,0,8,"adapt"],[64,0,0,"plain"],[40,0,16,"adapt"]];
 function getWorker(){
   if(ocrW)return ocrW;
   ocrW=loadTess().then(function(){return Tesseract.createWorker("eng")}).then(function(w){return Promise.resolve(w.setParameters({tessedit_pageseg_mode:"7"})).then(function(){return w})});
@@ -411,7 +412,7 @@ function wideRead(src,sw,sh,o){
       var c=WIDE[i++];
       if(o.progress)o.progress(i,WIDE.length);
       var rg=o.reg||[0,0.66,0.68,0.98],sc=1666*c[0]*(o.mul||1)/sw,cvs=cropRect(src,sw,sh,rg[0]*sw,rg[1]*sh,rg[2]*sw,rg[3]*sh,sc,[c[1],c[2]]);
-      return setPsm(w,String(c[3])).then(function(){return w.recognize(cvs)}).then(function(r){
+      if(o.onCrop)o.onCrop(cvs);return setPsm(w,String(c[3])).then(function(){return w.recognize(cvs)}).then(function(r){
         if(o.onText)o.onText(r.data.text);
         var p=parseCard(r.data.text,true);
         if(p.n&&p.si>=0&&!(p.amb&&p.amb.length>1))reads.push(p);
@@ -617,12 +618,29 @@ function liveLayout(me){
   var s=Math.min(cw/vw,ch/vh),dw=vw*s,dh=vh*s,ox=(cw-dw)/2,oy=(ch-dh)/2;
   var fw=0.6,fh=Math.min(0.92,fw*vw*1.4/vh),x0=(1-fw)/2,y0=(1-fh)/2;
   f.style.cssText="left:"+(ox+x0*dw)+"px;top:"+(oy+y0*dh)+"px;width:"+(fw*dw)+"px;height:"+(fh*dh)+"px;right:auto;bottom:auto";
-  me.reg=[Math.max(0,x0-0.02),Math.max(0,y0+fh*0.72),Math.min(1,x0+fw*0.62),Math.min(1,y0+fh+0.02)];me.mul=1/fw;
+  me.reg=[Math.max(0,x0-0.02),Math.max(0,y0+fh*0.72),Math.min(1,x0+fw*0.62),Math.min(1,y0+fh+0.02)];me.mul=1/fw;me.reg2=[Math.max(0,x0-0.04),Math.max(0,y0+fh*0.45),Math.min(1,x0+fw+0.04),Math.min(1,y0+fh+0.04)];
+}
+function liveSharp(me){
+  var v=document.getElementById("lv");if(!v.videoWidth)return 0;
+  var r=me.reg||[0,.55,.7,1],W=320,sx=r[0]*v.videoWidth,sy=r[1]*v.videoHeight,sw=(r[2]-r[0])*v.videoWidth,sh=(r[3]-r[1])*v.videoHeight,H=Math.max(24,Math.round(W*sh/sw));
+  var c=me.sc||(me.sc=document.createElement("canvas"));c.width=W;c.height=H;var x=c.getContext("2d",{willReadFrequently:true});
+  try{x.drawImage(v,sx,sy,sw,sh,0,0,W,H);var d=x.getImageData(0,0,W,H).data,g=new Float32Array(W*H),i,j,s=0,s2=0,n=0;
+  for(i=0;i<W*H;i++)g[i]=d[i*4]*.3+d[i*4+1]*.59+d[i*4+2]*.11;
+  for(j=1;j<H-1;j++)for(i=1;i<W-1;i++){var l=4*g[j*W+i]-g[j*W+i-1]-g[j*W+i+1]-g[(j-1)*W+i]-g[(j+1)*W+i];s+=l;s2+=l*l;n++}
+  return s2/n-(s/n)*(s/n)}catch(e){return 0}
+}
+function liveWait(me){
+  if(live!==me||!me.auto||me.pending||me.busy)return;
+  var s=liveSharp(me),now=Date.now();
+  me.hist=(me.hist||[]).filter(function(q){return now-q[0]<4000});me.hist.push([now,s]);
+  var mx=0;me.hist.forEach(function(q){if(q[1]>mx)mx=q[1]});
+  var ok=s>0&&s>=0.8*mx&&mx>0&&(me.prev&&s>=0.8*me.prev);me.prev=s;
+  if(ok||now-(me.last||0)>4500){me.last=now;liveShot(me,false)}else me.timer=setTimeout(function(){liveWait(me)},250);
 }
 function liveSchedule(me,ms){
   clearTimeout(me.timer);
   if(live!==me||!me.auto||me.pending)return;
-  me.timer=setTimeout(function(){liveShot(me,false)},ms);
+  me.timer=setTimeout(function(){me.last=me.last||Date.now();liveWait(me)},ms);
 }
 function liveStart(){
   if(live)return;
@@ -659,8 +677,9 @@ function liveShot(me,manual){
   liveGrab(me).then(function(g){
     info=g.how+" "+g.w+"x"+g.h;dbg.textContent=info+" · leyendo…";
     var al=function(){return live===me};
-    return wideRead(g.src,g.w,g.h,{alive:al,fast:true,reg:me.reg,mul:me.mul,onText:function(t){txts.push(String(t).replace(/\s+/g," ").trim().slice(0,22))}}).then(function(p){
+    return wideRead(g.src,g.w,g.h,{alive:al,fast:true,reg:me.reg,mul:me.mul,onCrop:function(c){try{var im=document.getElementById('lvThumb');im.src=c.toDataURL('image/jpeg',0.6)}catch(e){}},onText:function(t){txts.push(String(t).replace(/\s+/g," ").trim().slice(0,22))}}).then(function(p){
       if(p||!al())return p;
+      if(me.reg2&&al()){liveSt("Probando zona más amplia…");return wideRead(g.src,g.w,g.h,{alive:al,fast:true,reg:me.reg2,mul:me.mul,onText:function(t){txts.push(String(t).replace(/\s+/g," ").trim().slice(0,22))}}).then(function(p2){return p2||findNumber(g.src,g.w,g.h,{max:10,cfgs:3,loose:true,confirm:true,log:[],alive:al})})}
       liveSt("Buscando el número con más calma…");
       return findNumber(g.src,g.w,g.h,{max:10,cfgs:3,loose:true,confirm:true,log:[],alive:al});
     }).then(function(p){g.close();return p},function(e){g.close();throw e});
