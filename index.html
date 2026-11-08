@@ -85,14 +85,14 @@ dialog img{width:100%;border-radius:8px;margin:8px 0}
   <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
     <input id="search" type="search" placeholder="Buscar carta por nombre o número…" style="flex:1;min-width:150px;padding:9px;border:1px solid var(--bd);border-radius:9px;background:var(--card);color:var(--fg)">
     <button class="chip on" id="scanBtn" type="button">📷 Escanear carta</button>
-    <button class="chip on" id="liveBtn" type="button">⚡ Ráfaga</button>
+    <button class="chip on" id="liveBtn" type="button" hidden>⚡ Ráfaga</button>
     <button class="chip" id="exportBtn" type="button">Exportar copia</button>
     <button class="chip" id="importBtn" type="button">Importar copia</button>
     <input id="importFile" type="file" accept="application/json,.json" hidden>
   </div>
 </header>
 <main>
-  <p class="hint">Escanea una carta (v6.6) o tócala para marcarla como tuya. Las que te faltan se ven en blanco y negro; al desbloquearlas aparecen a todo color.</p>
+  <p class="hint">Escanea una carta (v7.0) o tócala para marcarla como tuya. Para escanear, acerca la cámara a la mitad inferior de la carta, con buena luz y sin reflejos. Las que te faltan se ven en blanco y negro; al desbloquearlas aparecen a todo color.</p>
   <div id="extraStats" class="hint" style="margin-bottom:10px"></div>
   <div class="grid" id="grid"></div>
   <div id="msg"></div>
@@ -345,7 +345,7 @@ function adaptBin(g,w,h,C){
       o[y*w+x]=s[y*w+x]>mean-C?255:0}}
   return o;
 }
-var APPV="6.6",ocrW=null,CFGS=[[50,41,3],[64,41,3],[30,31,4],[40,41,2],[52,0,8,"adapt"],[64,0,0,"plain"],[40,0,16,"adapt"]];
+var APPV="7.0",ocrW=null,CFGS=[[50,41,3],[64,41,3],[30,31,4],[40,41,2],[52,0,8,"adapt"],[64,0,0,"plain"],[40,0,16,"adapt"]];
 function getWorker(){
   if(ocrW)return ocrW;
   ocrW=loadTess().then(function(){return Tesseract.createWorker("eng")}).then(function(w){return Promise.resolve(w.setParameters({tessedit_pageseg_mode:"7"})).then(function(){return w})});
@@ -382,6 +382,29 @@ function finishCrop(c,pc){
 function cropCanvas(src,sw,sh,b,cfg,ang){
   return cropRect(src,sw,sh,b.x-b.w*0.15,b.y-b.h*0.4,b.x+b.w*1.15,b.y+b.h*1.4,cfg[0]/b.h,[cfg[1],cfg[2],cfg[3]],ang);
 }
+/* Lectura amplia: una sola pasada sobre la zona inferior izquierda de la foto, con el análisis de texto disperso del lector */
+var WIDE=[[1.0,41,3,12],[1.0,31,4,11],[2.0,41,3,11],[2.0,31,4,11]],curPsm="7";
+function setPsm(w,p){if(curPsm===p)return Promise.resolve();curPsm=p;return Promise.resolve(w.setParameters({tessedit_pageseg_mode:p}))}
+function wideRead(src,sw,sh,o){
+  return getWorker().then(function(w){
+    var reads=[],i=0;
+    function best(){var cnt={},pp={},bk=null;reads.forEach(function(x){var k=x.si+"/"+x.n;cnt[k]=(cnt[k]||0)+1;if(!pp[k])pp[k]=x;if(bk===null||cnt[k]>cnt[bk])bk=k});return bk===null?null:{p:pp[bk],n:cnt[bk]}}
+    function done(){var b=best();return setPsm(w,"7").then(function(){return b?b.p:null})}
+    function step(){
+      if(o.alive&&!o.alive())return setPsm(w,"7").then(function(){return null});
+      var b=best();if((b&&b.n>=2)||i>=WIDE.length)return done();
+      var c=WIDE[i++];
+      if(o.progress)o.progress(i,WIDE.length);
+      var sc=1666*c[0]/sw,cvs=cropRect(src,sw,sh,0,0.66*sh,0.68*sw,0.98*sh,sc,[c[1],c[2]]);
+      return setPsm(w,String(c[3])).then(function(){return w.recognize(cvs)}).then(function(r){
+        var p=parseCard(r.data.text,true);
+        if(p.n&&p.si>=0&&!(p.amb&&p.amb.length>1))reads.push(p);
+        return step();
+      });
+    }
+    return step();
+  });
+}
 /* Lee el número alrededor de un punto tocado por el usuario (rx, ry en 0..1) */
 var PICKW=[[0.20,0.040],[0.14,0.032],[0.28,0.050]],PICKS=[1,0.7,1.45],PICKC=[[41,3],[31,4],[41,2],[0,8,"adapt"]],PICKO=[0,-0.012,0.012];
 function readAt(src,sw,sh,rx,ry,o){
@@ -404,7 +427,7 @@ function readAt(src,sw,sh,rx,ry,o){
         return step();
       });
     }
-    return step();
+    return setPsm(w,"7").then(step);
   });
 }
 /* Busca el número impreso en la foto: localiza líneas de texto pequeñas abajo y lee cada una a máxima resolución */
@@ -448,7 +471,7 @@ function findNumber(src,sw,sh,o){
         return step();
       });
     }
-    return step();
+    return setPsm(w,"7").then(step);
   });
 }
 function codeIn(txt,s){return !!s.code&&new RegExp("(^|[^A-Za-z0-9])"+s.code+"([^A-Za-z0-9]|$)","i").test(txt)}
@@ -500,9 +523,11 @@ function showScan(){
 function runOcr(im,id){
   if(scan&&scan.id===id)scan.im=im;
   setSt("Cargando lector de texto…");
-  findNumber(im,im.naturalWidth||im.width,im.naturalHeight||im.height,{max:24,cfgs:7,loose:true,confirm:true,log:(scan&&scan.id===id?(scan.log=[]):[]),
-    alive:function(){return !!scan&&scan.id===id},
-    progress:function(a,b){setSt("Buscando el número… "+Math.round(a/b*100)+" %")}
+  var sw=im.naturalWidth||im.width,sh=im.naturalHeight||im.height,alive=function(){return !!scan&&scan.id===id};
+  wideRead(im,sw,sh,{alive:alive,progress:function(a,b){setSt("Leyendo la carta… "+a+" de "+b)}}).then(function(p){
+    if(p||!alive())return p;
+    return findNumber(im,sw,sh,{max:16,cfgs:5,loose:true,confirm:true,log:(scan&&scan.id===id?(scan.log=[]):[]),alive:alive,
+      progress:function(a,b){setSt("Buscando el número… "+Math.round(a/b*100)+" %")}});
   }).then(function(p){
     if(!scan||scan.id!==id)return;
     if(p){scan.si=p.si;scan.n=p.n;scan.ok=true;scan.amb=p.amb||[]}else{scan.n=0;scan.ok=false;scan.amb=[]}
