@@ -41,6 +41,7 @@ h1.hasLogo .nmTxt{position:absolute;width:1px;height:1px;overflow:hidden;clip:re
 .fan i:nth-child(1){left:4px;top:14px;transform:rotate(-13deg)}
 .fan i:nth-child(2){left:36px;top:0;transform:rotate(2deg);z-index:1}
 .fan i:nth-child(3){left:66px;top:15px;transform:rotate(14deg);z-index:2}
+.fan i img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
 .fan.empty i{background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 2px rgba(255,255,255,.55)}
 .dexline{display:flex;justify-content:space-between;font-size:11px;font-style:italic;color:#5b5878;border-bottom:1.5px solid rgba(28,26,46,.18);padding-bottom:5px}
 .atk{margin-top:7px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -249,7 +250,15 @@ var SETS=[{id:"m1s",code:"M1S",name:"Mega Symphonia",total:92,main:63,rar:[[64,"
 var cur=0,filter="all",pending=null,col=emptyCol(),unlocking=null,scan=null,tessP=null;
 function emptyCol(){var d={};SETS.forEach(function(s){d[s.id]={}});return d}
 function pad(n){return ("00"+n).slice(-3)}
-function imgUrl(s,i){return "https://assets.dittobase.com/tcg/cards/ja/"+s.id.toUpperCase()+"/"+pad(i)+".jpg"}
+var EXT={};
+function imgUrl(s,i){return "https://assets.dittobase.com/tcg/cards/ja/"+s.code+"/"+pad(i)+"."+(EXT[s.id]||"jpg")}
+/* Las colecciones más antiguas guardan las imágenes en .webp: si falla el .jpg, se prueba .webp y se recuerda */
+function imgFb(el,hide){
+  var m=/\/ja\/([^\/]+)\/(\d+)\.(jpg|webp)$/.exec(el.src||"");
+  if(m&&m[3]==="jpg"){var s=SETS.filter(function(x){return x.code===m[1]})[0];if(s){EXT[s.id]="webp";el.src=el.src.replace(/\.jpg$/,".webp");return}}
+  if(m&&m[3]==="webp"){var s2=SETS.filter(function(x){return x.code===m[1]})[0];if(s2)delete EXT[s2.id]}
+  if(hide)el.style.visibility="hidden";else el.remove();
+}
 function rarOf(s,i){var t="";s.rar.forEach(function(x){if(i>=x[0])t=x[1]});return t}
 function addOwned(d,s,k,c){if(!/^\d{3}$/.test(k)||+k<1||+k>s.total)return false;c=Math.floor(+c);d[s.id][k]=(c>=1&&c<=999)?c:1;return true}
 function saveCol(){
@@ -281,7 +290,7 @@ function render(){
   var ton=document.querySelector("#tabs .tab.on");if(ton&&ton.scrollIntoView)ton.scrollIntoView({inline:"center",block:"nearest"});
   document.getElementById("chips").innerHTML=[["all","Todas"],["own","Tengo"],["miss","Faltan"]].map(function(c){return '<button class="chip'+(filter===c[0]?' on':'')+'" data-f="'+c[0]+'">'+c[1]+'</button>'}).join("");
   var sn=document.getElementById("setName");
-  if(sn.getAttribute("data-s")!==s.id){sn.setAttribute("data-s",s.id);sn.className="";sn.innerHTML='<span class="nmTxt"></span><img class="slogo" alt="" src="https://assets.dittobase.com/tcg/sets/ja/'+s.id.toUpperCase()+'-logo.webp" onload="this.parentNode.classList.add(\'hasLogo\')" onerror="var n=+(this.dataset.l||0);this.dataset.l=n+1;if(n===0)this.src=\'https://assets.dittobase.com/tcg/sets/ja/'+s.id.toUpperCase()+'-logo.png\';else if(n===1)this.src=\'logos/'+s.id+'.png\';else this.remove()">';sn.firstChild.textContent=s.name}document.getElementById("miniName").textContent=s.name;document.getElementById("miniCnt").textContent=have+"/"+s.total;document.getElementById("dex").textContent="N.º "+have+"/"+s.total;
+  if(sn.getAttribute("data-s")!==s.id){sn.setAttribute("data-s",s.id);sn.className="";sn.innerHTML='<span class="nmTxt"></span><img class="slogo" alt="" src="https://assets.dittobase.com/tcg/sets/ja/'+s.code+'-logo.webp" onload="this.parentNode.classList.add(\'hasLogo\')" onerror="var n=+(this.dataset.l||0);this.dataset.l=n+1;if(n===0)this.src=\'https://assets.dittobase.com/tcg/sets/ja/'+s.code+'-logo.png\';else if(n===1)this.src=\'logos/'+s.id+'.png\';else this.remove()">';sn.firstChild.textContent=s.name}document.getElementById("miniName").textContent=s.name;document.getElementById("miniCnt").textContent=have+"/"+s.total;document.getElementById("dex").textContent="N.º "+have+"/"+s.total;
   document.getElementById("cnt").textContent=have+" de "+s.total+" cartas · faltan "+(s.total-have);
   var p=Math.round(have/s.total*100);
   tweenPct(p);document.getElementById("rank").textContent=p>=100?"Campeón":p>=75?"Maestro":p>=50?"Experto":p>=25?"Entrenador":p>0?"Novato":"Aprendiz";
@@ -290,7 +299,7 @@ function render(){
   document.getElementById("nHave").textContent=have;document.getElementById("nMiss").textContent=s.total-have;document.getElementById("nDup").textContent=duplicates;
   var last=Object.keys(own).sort().slice(-3),fan=document.getElementById("fan");
   fan.className="fan"+(last.length?"":" empty");
-  fan.innerHTML=[0,1,2].map(function(j){var k=last[j];return k?'<i style="background-image:url('+imgUrl(s,+k)+')"></i>':'<i></i>'}).join("");
+  fan.innerHTML=[0,1,2].map(function(j){var k=last[j];return k?'<i><img alt="" src="'+imgUrl(s,+k)+'" onerror="imgFb(this)"></i>':'<i></i>'}).join("");
   var pages={},order=[];
   for(var i=1;i<=s.total;i++){
     var k=pad(i),q=own[k]||0,o=q>0,pg=Math.ceil(i/9);
@@ -300,7 +309,7 @@ function render(){
     if(filter==="own"&&!o)continue;
     if(filter==="miss"&&o)continue;
     if(search&&!((nm+" "+k+" "+rr).toLowerCase().includes(search)))continue;
-    pages[pg].h+='<button class="slot'+(o?' own':'')+'" data-k="'+k+'" title="'+nm+'"><img class="ref'+(o&&unlocking!==k?' col':'')+'" src="'+imgUrl(s,i)+'" alt="" loading="lazy" onload="this.parentNode.classList.add(\'has\')" onerror="this.remove()"><span class="n">'+k+'</span><span class="nm">'+nm+'</span><span class="lk">'+(o?'✓':'🔒')+'</span>'+tag+(q>1?'<span class="tag q">×'+q+'</span>':'')+'</button>';
+    pages[pg].h+='<button class="slot'+(o?' own':'')+'" data-k="'+k+'" title="'+nm+'"><img class="ref'+(o&&unlocking!==k?' col':'')+'" src="'+imgUrl(s,i)+'" alt="" loading="lazy" onload="this.parentNode.classList.add(\'has\')" onerror="imgFb(this)"><span class="n">'+k+'</span><span class="nm">'+nm+'</span><span class="lk">'+(o?'✓':'🔒')+'</span>'+tag+(q>1?'<span class="tag q">×'+q+'</span>':'')+'</button>';
   }
   var h="";
   order.forEach(function(pg){var x=pages[pg];if(!x.h)return;h+='<section class="pg'+(x.have===x.n?' full':'')+'"><div class="pgh"><b>Página '+pg+'</b><em>'+(x.have===x.n?'★ ':'')+x.have+' de '+x.n+'</em></div><div class="g">'+x.h+'</div></section>'});
@@ -327,7 +336,7 @@ function dialog(title,html){document.getElementById("dt").textContent=title;docu
 function closeD(){var d=document.getElementById("dlg");if(d.open)d.close()}
 function cardDialog(s,k){
   var q=col[s.id][k]||0,nm=s.names[+k-1]||"",rr=rarOf(s,+k),title=nm||("Carta "+k);
-  var img='<div class="cv"><img src="'+imgUrl(s,+k)+'" alt=""'+(q?'':' style="filter:grayscale(1) brightness(.45)"')+' onerror="this.remove()">'+(q?'<span class="sh"></span>':'')+'</div><p class="cmeta">'+s.name+' · '+k+'/'+s.total+(rr?' · '+rr:'')+'</p>';
+  var img='<div class="cv"><img src="'+imgUrl(s,+k)+'" alt=""'+(q?'':' style="filter:grayscale(1) brightness(.45)"')+' onerror="imgFb(this)">'+(q?'<span class="sh"></span>':'')+'</div><p class="cmeta">'+s.name+' · '+k+'/'+s.total+(rr?' · '+rr:'')+'</p>';
   if(q)dialog(title,img+'<div class="stp"><button data-a="minus" aria-label="Quitar una copia">−</button><b>'+q+'<small>'+(q===1?'copia':'copias')+'</small></b><button data-a="plus" aria-label="Añadir una copia">+</button></div><button class="btn d" data-a="del">Quitar de mi colección</button><button class="btn" data-a="close">Cerrar</button>');
   else dialog(title,img+'<button class="btn p" data-a="own">Tengo esta carta</button><button class="btn" data-a="close">Cerrar</button>');
 }
@@ -679,7 +688,7 @@ function scanInfo(){
   var s=SETS[+a.value],n=Math.floor(+b.value);
   if(!n||n<1||n>s.total){el.textContent="Número entre 1 y "+s.total;if(im)im.style.display="none";return}
   var k=pad(n);el.textContent=k+" · "+(s.names[n-1]||"")+(col[s.id][k]?" · ya la tienes: se sumará una copia":"");
-  if(im){im.style.display="block";im.onerror=function(){im.style.display="none"};im.src=imgUrl(s,n)}
+  if(im){im.style.display="block";im.onerror=function(){if(/\.jpg$/.test(im.src))imgFb(im,true);else im.style.display="none"};im.src=imgUrl(s,n)}
 }
 function showScan(){
   if(!scan||!document.getElementById("dlg").open)return;
@@ -851,7 +860,7 @@ function liveShot(me,manual){
 function liveAsk(me,p){
   var s=SETS[p.si],k=pad(p.n),q=col[s.id][k]||0,img=document.getElementById("lvImg");
   me.pending=p;
-  img.style.visibility="visible";img.onerror=function(){img.style.visibility="hidden"};img.src=imgUrl(s,p.n);
+  img.style.visibility="visible";img.onerror=function(){imgFb(img,true)};img.src=imgUrl(s,p.n);
   document.getElementById("lvTxt").textContent=s.name+" · "+k+(s.names[p.n-1]?" · "+s.names[p.n-1]:"")+(q?" (ya tienes "+q+")":"");
   document.getElementById("lvRes").hidden=false;
   liveSt("¿Es esta carta?");
